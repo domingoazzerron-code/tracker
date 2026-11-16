@@ -351,9 +351,39 @@ mask:radial-gradient(circle calc(var(--ps)/2 + 7px) at 50% calc(var(--ps)/2 - va
 /* ===== Native feel ===== */
 html,body{overscroll-behavior-y:none}
 button,.bar a,.drawer a,.flm{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+
+/* ===== Auth gate ===== */
+#auth{position:fixed;inset:0;z-index:200;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:calc(24px + env(safe-area-inset-top,0px)) 20px calc(24px + env(safe-area-inset-bottom,0px));overflow-y:auto}
+#auth .ac{width:100%;max-width:380px;background:var(--card);border-radius:var(--r);box-shadow:var(--sh2);padding:28px 22px}
+#auth h1{margin:0 0 4px;font-size:24px;letter-spacing:-.02em;text-align:center}
+#auth .as{margin:0 0 20px;color:var(--mute);text-align:center;font-size:14px}
+#auth .tabs{display:flex;gap:4px;padding:3px;background:var(--fill);border-radius:999px;margin-bottom:16px}
+#auth .tabs button{flex:1;min-height:40px;border:0;border-radius:999px;background:none;color:var(--mute);font:600 14px var(--font)}
+#auth .tabs button[aria-selected="true"]{background:var(--card);color:var(--ink);box-shadow:var(--sh1)}
+#auth label{display:block;font-size:12.5px;font-weight:600;color:var(--mute);margin:0 0 6px}
+#auth input{width:100%;min-height:48px;padding:0 14px;margin-bottom:14px;border-radius:var(--rs);border:1.5px solid var(--line2);background:var(--bg);color:var(--ink);font:16px var(--font)}
+#auth input:focus{outline:2px solid var(--g);outline-offset:1px}
+#auth .am{min-height:20px;margin:-2px 0 12px;font-size:13px;color:var(--bad)}
+#auth .am.ok{color:var(--ok)}
+#auth .lg{width:56px;height:56px;margin:0 auto 12px;display:block;border-radius:14px}
 </style>
 </head>
 <body>
+<div id="auth" role="dialog" aria-modal="true" aria-label="Sign in">
+  <div class="ac">
+    <img class="lg" src="/icon-192.png" alt="">
+    <h1>Wisp Tracker</h1>
+    <p class="as" id="asub">Create an account to save your progress.</p>
+    <div id="aform" hidden>
+      <div class="tabs" role="tablist"><button type="button" role="tab" id="tup" aria-selected="true">Sign up</button><button type="button" role="tab" id="tin" aria-selected="false">Sign in</button></div>
+      <label for="aem">Email</label><input id="aem" type="email" autocomplete="email" inputmode="email" autocapitalize="none" placeholder="you@example.com">
+      <label for="apw">Password</label><input id="apw" type="password" autocomplete="new-password" placeholder="At least 6 characters">
+      <div class="am" id="amsg" role="status" aria-live="polite"></div>
+      <button type="button" class="btn pri blk" id="ago">Create account</button>
+      <button type="button" class="btn txt blk" id="afor" style="margin-top:8px" hidden>Forgot password?</button>
+    </div>
+  </div>
+</div>
 <main>
   <header class="top"><a class="flm" id="flm" href="#plan" aria-label="Streak and achievements"><svg viewBox="0 0 24 24"><path d="M12 2c.6 3.4 5.4 5.6 5.4 11A5.4 5.4 0 0 1 6.6 13c0-2 1-3.4 2.2-4.4.1 2 .9 3 2 3.2C10.4 8.6 10.6 5.2 12 2z"/></svg><b id="fl">0</b></a><div id="ttl"></div><div class="pill"><button id="bcrv" aria-label="Start 10 minute craving timer"><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="7"/><path d="M12 9v4l2.5 1.5M9.5 3h5"/></svg><span id="bct"></span></button><button id="menu" aria-label="Open menu" aria-expanded="false"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button></div></header>
 
@@ -542,6 +572,7 @@ button,.bar a,.drawer a,.flm{-webkit-user-select:none;user-select:none;-webkit-t
   <div class="dg" style="--i:7">Preferences</div>
   <div class="pref" id="prefs" style="--i:8"><span class="pl">Appearance</span><div class="seg" id="theme" role="group" aria-label="Appearance"><button data-t="auto">Auto</button><button data-t="light">Light</button><button data-t="dark">Dark</button></div><span class="pl">Motion and haptics</span><div class="seg" id="fxs" role="group" aria-label="Motion and haptics"><button data-m="1">Full</button><button data-m="2">Calm</button><button data-m="3">Off</button></div><div class="k" id="fxn"></div></div>
   <div class="dsep" style="--i:9"></div>
+  <a href="#" id="dout" style="--i:10" hidden>Sign out<small id="dem"></small></a>
   <a href="#setup" data-v="setup" style="--i:10">Settings<small>Limits, pack price, triggers, data</small></a>
 </aside>
 
@@ -552,6 +583,116 @@ button,.bar a,.drawer a,.flm{-webkit-user-select:none;user-select:none;-webkit-t
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script>
+/* ===== Supabase sign up / sign in + sync =====
+   1) Put your project URL and anon (public) key below.
+   2) Run the SQL from the setup notes once in the Supabase SQL editor. */
+(function(){
+var SUPABASE_URL='YOUR_SUPABASE_URL';          // e.g. https://abcd1234.supabase.co
+var SUPABASE_ANON_KEY='YOUR_SUPABASE_ANON_KEY'; // the anon / public key, never the service_role key
+var K='cigtracker.v1',MOD='cigtracker.mod',PULL='cigtracker.pulled';
+function $(i){return document.getElementById(i);}
+var gate=$('auth');
+function hide(){gate.hidden=true;}
+var configured=SUPABASE_URL.indexOf('http')===0&&SUPABASE_ANON_KEY.indexOf('YOUR_')!==0;
+if(!configured||!window.supabase){
+  if(configured&&navigator.onLine===false){hide();return;}   // offline: let the app run locally
+  $('asub').textContent=configured?'Could not load the sign-in library. Check your connection and reload.':'Setup needed: put your Supabase URL and anon key in index.html (search for YOUR_SUPABASE_URL).';
+  $('asub').style.color='var(--bad)';
+  return;
+}
+
+var sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+var user=null,mode='up',timer=null,busy=false;
+
+/* remember when local data last changed, and push to the cloud shortly after each save */
+var _set=Storage.prototype.setItem;
+Storage.prototype.setItem=function(k,v){_set.call(this,k,v);if(this===window.localStorage&&k===K){try{_set.call(this,MOD,String(Date.now()));}catch(e){}schedule();}};
+function schedule(){if(!user)return;clearTimeout(timer);timer=setTimeout(push,1500);}
+function push(){
+  if(!user)return Promise.resolve();
+  var raw=null;try{raw=localStorage.getItem(K);}catch(e){}
+  if(!raw)return Promise.resolve();
+  var data;try{data=JSON.parse(raw);}catch(e){return Promise.resolve();}
+  return sb.from('user_data').upsert({user_id:user.id,data:data,updated_at:new Date().toISOString()}).then(function(r){if(r.error)console.warn('sync',r.error.message);});
+}
+window.addEventListener('pagehide',function(){if(user&&timer){clearTimeout(timer);push();}});
+document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden'&&user&&timer){clearTimeout(timer);push();}});
+
+/* on sign-in: take the cloud copy if it is newer, otherwise upload this device's copy */
+function reconcile(){
+  return sb.from('user_data').select('data,updated_at').eq('user_id',user.id).maybeSingle().then(function(r){
+    if(r.error){console.warn('sync',r.error.message);return;}
+    var localRaw=null,localMod=0;
+    try{localRaw=localStorage.getItem(K);localMod=+localStorage.getItem(MOD)||0;}catch(e){}
+    var local=null;try{local=localRaw&&JSON.parse(localRaw);}catch(e){}
+    var localHas=!!(local&&(local.setup||(local.log&&local.log.length)));
+    var cloud=r.data;
+    if(cloud&&cloud.data){
+      var cloudMod=Date.parse(cloud.updated_at)||0;
+      if(!localHas||cloudMod>localMod){
+        var already=false;try{already=sessionStorage.getItem(PULL)===cloud.updated_at;}catch(e){}
+        if(!already){
+          try{sessionStorage.setItem(PULL,cloud.updated_at);_set.call(localStorage,K,JSON.stringify(cloud.data));_set.call(localStorage,MOD,String(cloudMod));}catch(e){}
+          location.reload();return 'reload';
+        }
+        return;
+      }
+    }
+    if(localHas)return push();
+  });
+}
+
+function msg(t,ok){var m=$('amsg');m.textContent=t||'';m.className='am'+(ok?' ok':'');}
+function setMode(m){
+  mode=m;var up=m==='up';
+  $('tup').setAttribute('aria-selected',up);$('tin').setAttribute('aria-selected',!up);
+  $('ago').textContent=up?'Create account':'Sign in';
+  $('apw').setAttribute('autocomplete',up?'new-password':'current-password');
+  $('afor').hidden=up;$('asub').textContent=up?'Create an account to save your progress.':'Welcome back.';msg('');
+}
+function showForm(){$('aform').hidden=false;gate.hidden=false;setMode('up');}
+function enter(u){
+  user=u;$('dout').hidden=false;$('dem').textContent=u.email||'';
+  return reconcile().then(function(x){if(x!=='reload')hide();});
+}
+$('tup').onclick=function(){setMode('up');};
+$('tin').onclick=function(){setMode('in');};
+function go(){
+  if(busy)return;
+  var email=$('aem').value.trim(),pw=$('apw').value;
+  if(!email||pw.length<6){msg('Enter your email and a password of at least 6 characters.');return;}
+  busy=true;$('ago').disabled=true;msg('');
+  var req=mode==='up'?sb.auth.signUp({email:email,password:pw,options:{emailRedirectTo:location.origin}}):sb.auth.signInWithPassword({email:email,password:pw});
+  req.then(function(r){
+    busy=false;$('ago').disabled=false;
+    if(r.error){msg(r.error.message);return;}
+    if(r.data&&r.data.session){return enter(r.data.session.user);}
+    msg('Check your email to confirm your account, then sign in.',true);setMode('in');
+  }).catch(function(){busy=false;$('ago').disabled=false;msg('Could not connect. Check your internet and try again.');});
+}
+$('ago').onclick=go;
+['aem','apw'].forEach(function(i){$(i).addEventListener('keydown',function(e){if(e.key==='Enter')go();});});
+$('afor').onclick=function(){
+  var email=$('aem').value.trim();if(!email){msg('Enter your email first.');return;}
+  sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin}).then(function(r){msg(r.error?r.error.message:'Password reset email sent.',!r.error);});
+};
+$('dout').onclick=function(e){
+  e.preventDefault();
+  (user?push():Promise.resolve()).then(function(){return sb.auth.signOut();}).then(function(){
+    try{localStorage.removeItem(K);localStorage.removeItem(MOD);sessionStorage.removeItem(PULL);}catch(x){}
+    location.reload();
+  });
+};
+sb.auth.onAuthStateChange(function(ev,session){if(ev==='PASSWORD_RECOVERY'){var p=prompt('Enter a new password (min 6 characters)');if(p&&p.length>=6)sb.auth.updateUser({password:p});}});
+
+sb.auth.getSession().then(function(r){
+  var ses=r.data&&r.data.session;
+  if(ses){enter(ses.user);}else{showForm();}
+}).catch(function(){hide();});
+})();
+</script>
 <script>
 (function(){
 var K='cigtracker.v1';

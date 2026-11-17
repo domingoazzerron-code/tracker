@@ -377,10 +377,15 @@ button,.bar a,.drawer a,.flm{-webkit-user-select:none;user-select:none;-webkit-t
     <div id="aform" hidden>
       <div class="tabs" role="tablist"><button type="button" role="tab" id="tup" aria-selected="true">Sign up</button><button type="button" role="tab" id="tin" aria-selected="false">Sign in</button></div>
       <label for="aem">Email</label><input id="aem" type="email" autocomplete="email" inputmode="email" autocapitalize="none" placeholder="you@example.com">
-      <label for="apw">Password</label><input id="apw" type="password" autocomplete="new-password" placeholder="At least 6 characters">
+      <label for="apw">Password</label><input id="apw" type="password" autocomplete="new-password" placeholder="At least 8 characters">
       <div class="am" id="amsg" role="status" aria-live="polite"></div>
       <button type="button" class="btn pri blk" id="ago">Create account</button>
       <button type="button" class="btn txt blk" id="afor" style="margin-top:8px" hidden>Forgot password?</button>
+    </div>
+    <div id="rform" hidden>
+      <label for="rpw">New password</label><input id="rpw" type="password" autocomplete="new-password" placeholder="At least 8 characters">
+      <div class="am" id="rmsg" role="status" aria-live="polite"></div>
+      <button type="button" class="btn pri blk" id="rgo">Update password</button>
     </div>
   </div>
 </div>
@@ -515,7 +520,7 @@ button,.bar a,.drawer a,.flm{-webkit-user-select:none;user-select:none;-webkit-t
     </div>
   </section>
 
-  <section class="view" id="v-summary" hidden><div class="card list" id="sumc"></div></section>
+  <section class="view" id="v-summary" hidden><div class="card list" id="sumc"></div><div class="btnrow" style="margin-top:12px"><button class="btn pri blk" id="shrb" type="button">Share my progress</button></div></section>
   <section class="view" id="v-tips" hidden>
     <details class="card tipg" open><summary>The 4 D’s</summary>
       <div class="li"><b>Delay</b><p>Most cravings fade in 5 to 10 minutes. Start the timer on Today.</p></div>
@@ -585,6 +590,29 @@ button,.bar a,.drawer a,.flm{-webkit-user-select:none;user-select:none;-webkit-t
   </div>
 </div>
 
+<style>
+#shr{position:fixed;inset:0;z-index:150;background:rgba(4,8,6,.78);display:flex;align-items:center;justify-content:center;padding:calc(14px + env(safe-area-inset-top,0px)) 14px calc(14px + env(safe-area-inset-bottom,0px));overflow-y:auto;animation:fade .2s var(--ease)}
+#shr[hidden]{display:none}
+#shr .shb{width:100%;max-width:400px;background:var(--card);border-radius:26px;padding:16px 16px 10px;box-shadow:0 20px 60px rgba(0,0,0,.45)}
+#shr .sht{font-size:15px;font-weight:700;text-align:center;margin:2px 0 12px}
+#shr canvas{display:block;width:auto;height:auto;max-width:100%;max-height:50dvh;margin:0 auto;border-radius:18px;box-shadow:0 8px 28px rgba(0,0,0,.35)}
+#shr .shs{display:flex;gap:6px;margin:14px 0 12px}
+#shr .shs button{flex:1;min-height:40px;border:1.5px solid var(--line2);border-radius:999px;background:none;color:var(--mute);font:600 12.5px var(--font);padding:0 4px}
+#shr .shs button.on{background:var(--g);border-color:var(--g);color:var(--onG)}
+#shr .shr2{display:flex;gap:8px}
+#shr .shr2 .btn{flex:1}
+</style>
+<div id="shr" hidden role="dialog" aria-modal="true" aria-label="Share your progress">
+  <div class="shb">
+    <div class="sht">Share your progress</div>
+    <canvas id="shc" width="1080" height="1350" aria-label="Preview of your progress card"></canvas>
+    <div class="shs" id="shs" role="group" aria-label="Headline number">
+      <button type="button" data-s="streak">Streak</button><button type="button" data-s="free">Smoke-free</button><button type="button" data-s="saved">Saved</button><button type="button" data-s="avoid">Avoided</button>
+    </div>
+    <div class="shr2"><button type="button" class="btn pri" id="shgo">Share</button><button type="button" class="btn sec" id="shsv">Save image</button></div>
+    <button type="button" class="btn txt blk" id="shx" style="margin-top:4px">Close</button>
+  </div>
+</div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script>
 /* ===== Supabase sign up / sign in + sync =====
@@ -596,7 +624,8 @@ var SUPABASE_ANON_KEY='sb_publishable_Jro4vk2E4E5PiE9_HHNdDw__L8mzhZF'; // the a
 var K='cigtracker.v1',MOD='cigtracker.mod',PULL='cigtracker.pulled';
 function $(i){return document.getElementById(i);}
 var gate=$('auth');
-function hide(){gate.hidden=true;}
+var recovering=false;
+function hide(){if(recovering)return;gate.hidden=true;}
 var configured=SUPABASE_URL.indexOf('http')===0&&SUPABASE_ANON_KEY.indexOf('YOUR_')!==0;
 if(!configured||!window.supabase){
   if(configured&&navigator.onLine===false){hide();return;}   // offline: let the app run locally
@@ -675,7 +704,8 @@ $('tin').onclick=function(){setMode('in');};
 function go(){
   if(busy)return;
   var email=$('aem').value.trim(),pw=$('apw').value;
-  if(!email||pw.length<6){msg('Enter your email and a password of at least 6 characters.');return;}
+  if(!email||!pw){msg('Enter your email and password.');return;}
+  if(mode==='up'&&pw.length<8){msg('Use a password of at least 8 characters.');return;}
   busy=true;$('ago').disabled=true;msg('');
   var req=mode==='up'?sb.auth.signUp({email:email,password:pw,options:{emailRedirectTo:location.origin}}):sb.auth.signInWithPassword({email:email,password:pw});
   req.then(function(r){
@@ -693,14 +723,21 @@ $('afor').onclick=function(){
 };
 $('ddel').onclick=function(e){
   e.preventDefault();
-  if(!confirm('Delete your account and all cloud data? This cannot be undone.'))return;
-  sb.rpc('delete_my_account').then(function(r){
-    if(r.error){alert('Could not delete account: '+r.error.message);return;}
-    return sb.auth.signOut().catch(function(){}).then(function(){
-      try{localStorage.removeItem(K);localStorage.removeItem(MOD);localStorage.removeItem('cigtracker.lock');sessionStorage.removeItem(PULL);}catch(x){}
-      location.reload();
+  function run(){
+    sb.rpc('delete_my_account').then(function(r){
+      if(r.error){
+        if(window.alertBox)window.alertBox('Could not delete account',r.error.message,true);else alert('Could not delete account: '+r.error.message);
+        return;
+      }
+      return sb.auth.signOut().catch(function(){}).then(function(){
+        try{localStorage.removeItem(K);localStorage.removeItem(MOD);localStorage.removeItem('cigtracker.lock');sessionStorage.removeItem(PULL);}catch(x){}
+        location.reload();
+      });
     });
-  });
+  }
+  var t='Delete your account?',b='This permanently deletes your login and all your cloud data. It cannot be undone.';
+  if(window.askConfirm)window.askConfirm(t,b,'Delete account',run,true);
+  else if(confirm(t+' '+b))run();
 };
 $('dout').onclick=function(e){
   e.preventDefault();
@@ -709,7 +746,27 @@ $('dout').onclick=function(e){
     location.reload();
   });
 };
-sb.auth.onAuthStateChange(function(ev,session){if(ev==='PASSWORD_RECOVERY'){var p=prompt('Enter a new password (min 6 characters)');if(p&&p.length>=6)sb.auth.updateUser({password:p});}});
+function showReset(){
+  recovering=true;gate.hidden=false;
+  $('aform').hidden=true;$('rform').hidden=false;
+  $('asub').textContent='Choose a new password.';$('rmsg').textContent='';
+  setTimeout(function(){try{$('rpw').focus();}catch(e){}},50);
+}
+function setNewPw(){
+  if(busy)return;var pw=$('rpw').value,m=$('rmsg');
+  m.className='am';
+  if(pw.length<8){m.textContent='Use a password of at least 8 characters.';return;}
+  busy=true;$('rgo').disabled=true;m.textContent='';
+  sb.auth.updateUser({password:pw}).then(function(r){
+    busy=false;$('rgo').disabled=false;
+    if(r.error){m.textContent=r.error.message;return;}
+    recovering=false;$('rpw').value='';$('rform').hidden=true;$('asub').textContent='';hide();
+    if(window.history&&history.replaceState){try{history.replaceState(null,'',location.pathname);}catch(e){}}
+  }).catch(function(){busy=false;$('rgo').disabled=false;m.textContent='Could not connect. Check your internet and try again.';});
+}
+$('rgo').onclick=setNewPw;
+$('rpw').addEventListener('keydown',function(e){if(e.key==='Enter')setNewPw();});
+sb.auth.onAuthStateChange(function(ev,session){if(ev==='PASSWORD_RECOVERY')showReset();});
 
 sb.auth.getSession().then(function(r){
   var ses=r.data&&r.data.session;
@@ -860,6 +917,7 @@ function closeOv(){$('ov').hidden=true;$('slipc').hidden=true;ovReset();if(!$('d
 document.addEventListener('keydown',function(e){if(e.key!=='Tab'||$('ov').hidden)return;var f=[].slice.call($('box').querySelectorAll('button')).filter(function(b){return !b.hidden&&b.offsetParent!==null;});if(!f.length)return;var a=document.activeElement;if(e.shiftKey&&(a===$('box')||a===f[0])){e.preventDefault();f[f.length-1].focus();}else if(!e.shiftKey&&a===f[f.length-1]){e.preventDefault();f[0].focus();}});
 function askConfirm(t,p,label,cb,danger){ovReset();$('ot').textContent=t;$('op').textContent=p;$('box').className='box';$('slipc').hidden=true;$('ok').textContent=label;$('ok').className='btn '+(danger?'dng':'pri')+' blk';cfCb=cb;$('cx').hidden=false;showOv();}
 $('ok').onclick=function(){var cb=cfCb;closeOv();if(cb)cb();};
+window.askConfirm=askConfirm;window.alertBox=alertBox;
 $('cx').onclick=function(){var f=cxCb;closeOv();if(f)f();};
 $('ov').onclick=function(e){if(e.target===this)closeOv();};
 document.addEventListener('keydown',function(e){if(e.key==='Escape'&&!$('ov').hidden)closeOv();});
@@ -1152,6 +1210,73 @@ $('csvx').onclick=function(){var rows=[],p2=function(n){return('0'+n).slice(-2);
   rows.sort(function(x,y){return x[0]-y[0];});
   var out=[['type','date','time','trigger','mood','note']].concat(rows.map(function(r){var d=new Date(r[0]);return [r[1],d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate()),p2(d.getHours())+':'+p2(d.getMinutes()),r[2],r[3],r[4]];}));
   saveFile('cigtracker-export-'+ymdNow()+'.csv','\uFEFF'+out.map(function(r){return r.map(csvq).join(',');}).join('\r\n'),'CSV saved','text/csv');};
+// ---------- share card ----------
+var shKind='streak',shB=null,FLAME='M12 2c.6 3.4 5.4 5.6 5.4 11A5.4 5.4 0 0 1 6.6 13c0-2 1-3.4 2.2-4.4.1 2 .9 3 2 3.2C10.4 8.6 10.6 5.2 12 2z';
+function shFree(ms){var h=Math.floor(ms/36e5),m;if(h>=48)return {v:Math.floor(h/24),u:'days'};if(h>=1)return {v:h,u:h===1?'hour':'hours'};m=Math.max(1,Math.floor(ms/6e4));return {v:m,u:m===1?'minute':'minutes'};}
+function shMoney(v){return S.cur+Math.round(v).toLocaleString('en-US');}
+function shStats(){var n=S.log.length,now=Date.now(),days=n?Math.round((startOfDay(now)-startOfDay(minTs()))/864e5)+1:0;calcSaved();return {n:n,days:days,st:streak(),cur:n?now-lastTs():0,av:Math.max(0,S.base*days-n),sv:savedAmt};}
+function shRR(x,a,b,w,h,r){r=Math.max(0,Math.min(r,w/2,h/2));x.beginPath();x.moveTo(a+r,b);x.arcTo(a+w,b,a+w,b+h,r);x.arcTo(a+w,b+h,a,b+h,r);x.arcTo(a,b+h,a,b,r);x.arcTo(a,b,a+w,b,r);x.closePath();}
+function shSp(x,t,px,py,sp,al){var i,w=0;for(i=0;i<t.length;i++)w+=x.measureText(t[i]).width+sp;w-=sp;var cx=al==='center'?px-w/2:al==='right'?px-w:px;x.textAlign='left';for(i=0;i<t.length;i++){x.fillText(t[i],cx,py);cx+=x.measureText(t[i]).width+sp;}}
+function shDraw(){
+  var c=$('shc'),x=c.getContext('2d'),W=1080,H=1350,s=shStats(),i,k,g,FONT='"DM Sans",system-ui,-apple-system,"Segoe UI",sans-serif',f=shFree(s.cur);
+  var all={streak:{v:String(s.st),c:(s.st===1?'day':'days')+' streak'},free:{v:f.v+' '+f.u,c:'since the last one'},saved:{v:shMoney(s.sv),c:'saved'},avoid:{v:String(s.av),c:'not smoked'}};
+  var hero={streak:{v:String(s.st),u:(s.st===1?'day ':'days ')+(lim()===0?'smoke-free in a row':'within my limit in a row')},free:{v:String(f.v),u:f.u+' since my last cigarette'},saved:{v:shMoney(s.sv),u:'saved so far'},avoid:{v:String(s.av),u:'cigarettes not smoked'}}[shKind];
+  /* background */
+  g=x.createLinearGradient(0,0,0,H);g.addColorStop(0,'#0B120D');g.addColorStop(1,'#060908');x.fillStyle=g;x.fillRect(0,0,W,H);
+  g=x.createRadialGradient(W/2,520,0,W/2,520,640);g.addColorStop(0,'rgba(91,190,120,.32)');g.addColorStop(.5,'rgba(47,122,68,.13)');g.addColorStop(1,'rgba(47,122,68,0)');x.fillStyle=g;x.fillRect(0,0,W,H);
+  g=x.createRadialGradient(W/2,1330,0,W/2,1330,520);g.addColorStop(0,'rgba(232,162,74,.20)');g.addColorStop(1,'rgba(232,162,74,0)');x.fillStyle=g;x.fillRect(0,0,W,H);
+  /* orbit rings with drifting sparks */
+  x.lineWidth=2;for(i=0;i<3;i++){x.strokeStyle='rgba(91,190,120,'+(0.17-i*0.045)+')';x.beginPath();x.arc(W/2,520,290+i*135,0,Math.PI*2);x.stroke();}
+  for(k=0;k<14;k++){var an=k*2.399963+.6,rr=290+(k%3)*135,sx=W/2+Math.cos(an)*rr,sy=520+Math.sin(an)*rr;if(sy>790||sy<190)continue;x.fillStyle=k%4===0?'rgba(232,162,74,.75)':'rgba(140,224,162,.7)';x.shadowColor=k%4===0?'rgba(232,162,74,.9)':'rgba(91,190,120,.9)';x.shadowBlur=18;x.beginPath();x.arc(sx,sy,3+(k%3)*2,0,Math.PI*2);x.fill();}
+  x.shadowBlur=0;
+  /* brand row */
+  x.fillStyle='#2F7A44';shRR(x,72,68,76,76,20);x.fill();
+  x.save();x.translate(72+38-12*2.6,68+38-10*2.6);x.scale(2.6,2.6);x.fillStyle='#EAF6EE';x.fill(new Path2D(FLAME));x.restore();
+  x.fillStyle='rgba(238,242,239,.92)';x.font='700 30px '+FONT;x.textBaseline='alphabetic';shSp(x,'WISP TRACKER',170,118,5,'left');
+  x.fillStyle='rgba(154,165,158,.9)';x.font='500 26px '+FONT;x.textAlign='right';x.fillText(new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),W-72,118);
+  /* glowing flame */
+  x.save();var sc=12;x.translate(W/2-12*sc,250-2*sc);x.scale(sc,sc);g=x.createLinearGradient(12,2,12,18.4);g.addColorStop(0,'#F4D58A');g.addColorStop(.35,'#8CE0A2');g.addColorStop(1,'#2F9A58');x.fillStyle=g;x.shadowColor='rgba(91,190,120,.85)';x.shadowBlur=70;x.fill(new Path2D(FLAME));x.restore();
+  x.shadowBlur=0;
+  /* hero number */
+  var fs=300;x.font='700 '+fs+'px '+FONT;while(x.measureText(hero.v).width>880&&fs>90){fs-=8;x.font='700 '+fs+'px '+FONT;}
+  g=x.createLinearGradient(0,560,0,720);g.addColorStop(0,'#FFFFFF');g.addColorStop(1,'#A9E6BC');x.fillStyle=g;x.textAlign='center';x.shadowColor='rgba(91,190,120,.45)';x.shadowBlur=40;x.fillText(hero.v,W/2,700);x.shadowBlur=0;
+  x.fillStyle='rgba(238,242,239,.88)';var us=46;x.font='600 '+us+'px '+FONT;while(x.measureText(hero.u).width>900&&us>26){us-=2;x.font='600 '+us+'px '+FONT;}x.fillText(hero.u,W/2,780);
+  /* three small stats */
+  var ks=['streak','free','saved','avoid'].filter(function(q){return q!==shKind;}),cw=296,gap=24,cy=850,ch=170;
+  ks.forEach(function(q,j){var cx0=72+j*(cw+gap);x.fillStyle='rgba(255,255,255,.05)';shRR(x,cx0,cy,cw,ch,32);x.fill();x.strokeStyle='rgba(255,255,255,.09)';x.lineWidth=2;shRR(x,cx0,cy,cw,ch,32);x.stroke();
+    var v=all[q].v,vs=54;x.font='700 '+vs+'px '+FONT;while(x.measureText(v).width>cw-40&&vs>26){vs-=2;x.font='700 '+vs+'px '+FONT;}x.fillStyle='#EEF2EF';x.textAlign='center';x.fillText(v,cx0+cw/2,cy+84);
+    x.fillStyle='rgba(154,165,158,.95)';x.font='500 25px '+FONT;x.fillText(all[q].c,cx0+cw/2,cy+128);});
+  /* last 14 days as ember capsules */
+  x.fillStyle='rgba(154,165,158,.9)';x.font='600 24px '+FONT;shSp(x,'LAST 14 DAYS',72,1090,4,'left');
+  var cnt=dcounts(),td=startOfDay(Date.now()),first=s.n?startOfDay(minTs()):td,days=[],mx=1,d;
+  for(i=13;i>=0;i--){d=dayAdd(td,-i);days.push({d:d,n:cnt[d]||0,l:limFor(d)});}
+  days.forEach(function(o){if(o.n>mx)mx=o.n;if(o.l>mx)mx=o.l;});
+  var bw=48,bg=18,bx=(W-(14*bw+13*bg))/2,base=1250,maxH=130;
+  days.forEach(function(o,j){var bx0=bx+j*(bw+bg),h=Math.max(20,Math.round(o.n/mx*maxH)),pre=o.d<first,over=o.n>o.l;
+    if(pre){x.fillStyle='rgba(255,255,255,.07)';shRR(x,bx0,base-20,bw,20,10);x.fill();return;}
+    g=x.createLinearGradient(0,base-h,0,base);if(over){g.addColorStop(0,'#F4C77A');g.addColorStop(1,'#D98A2B');x.shadowColor='rgba(232,162,74,.6)';}else{g.addColorStop(0,'#8CE0A2');g.addColorStop(1,'#2F9A58');x.shadowColor='rgba(91,190,120,.6)';}
+    x.fillStyle=g;x.shadowBlur=o.n===0?18:10;shRR(x,bx0,base-h,bw,h,24);x.fill();x.shadowBlur=0;});
+  x.fillStyle='rgba(154,165,158,.8)';x.font='500 24px '+FONT;x.textAlign='center';x.fillText('One day at a time.',W/2,1316);
+  shB=null;c.toBlob(function(b){shB=b;},'image/png');
+}
+function shOpen(){
+  if(!S.log.length){toast('Log something first, then share your progress');return;}
+  $('shr').hidden=false;inertOn(true);
+  var go=function(){shSet(shKind);};
+  if(document.fonts&&document.fonts.load){document.fonts.load('700 100px "DM Sans"').then(go,go);}else go();
+  try{$('shgo').focus({preventScroll:true});}catch(e){}
+}
+function shClose(){$('shr').hidden=true;if($('ov').hidden&&!$('drawer').classList.contains('open'))inertOn(false);}
+function shSet(k){shKind=k;var bs=$('shs').children,i;for(i=0;i<bs.length;i++){var on=bs[i].getAttribute('data-s')===k;bs[i].className=on?'on':'';bs[i].setAttribute('aria-pressed',on);}shDraw();}
+function shSave(b){var u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download='wisp-progress-'+ymdNow()+'.png';document.body.appendChild(a);a.click();setTimeout(function(){document.body.removeChild(a);URL.revokeObjectURL(u);},800);toast('Image saved');}
+$('shrb').onclick=shOpen;
+$('shx').onclick=shClose;
+$('shr').addEventListener('click',function(e){if(e.target===$('shr'))shClose();});
+$('shs').onclick=function(e){var b=e.target.closest?e.target.closest('[data-s]'):null;if(b)shSet(b.getAttribute('data-s'));};
+$('shgo').onclick=function(){if(!shB){toast('Still drawing, try again');return;}var f;try{f=new File([shB],'wisp-progress.png',{type:'image/png'});}catch(e){shSave(shB);return;}
+  if(navigator.canShare&&navigator.canShare({files:[f]})){navigator.share({files:[f],title:'My progress'}).catch(function(){});}else shSave(shB);};
+$('shsv').onclick=function(){if(!shB){toast('Still drawing, try again');return;}shSave(shB);};
+document.addEventListener('keydown',function(e){if(e.key==='Escape'&&!$('shr').hidden)shClose();});
 function updateLive(){updateLast();crv();if(++mc%30===0)checkMile();if(mc%15===0)renderSpacing();var l=lastTs();if(!$('v-plan').hidden){if(++tc%30===0)renderPlan();else if(l)$('stretch').textContent=durS(Date.now()-l);}}
 function live(){var v=location.hash.replace('#','')||'today',need=(v==='today'||v==='plan'||!!S.craveEnd)&&!document.hidden;if(need&&!tick){tick=setInterval(updateLive,1000);updateLive();}else if(!need&&tick){clearInterval(tick);tick=null;}}
 document.addEventListener('visibilitychange',live);
@@ -1222,6 +1347,7 @@ var row=$('dlock'),sub=$('dlocks'),ov=$('lock'),msgEl=$('lkm'),hiddenAt=0,busy=f
 function enabled(){try{return !!localStorage.getItem(KEY);}catch(e){return false;}}
 function b64(buf){var a=new Uint8Array(buf),s='',i;for(i=0;i<a.length;i++)s+=String.fromCharCode(a[i]);return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');}
 function unb64(t){t=t.replace(/-/g,'+').replace(/_/g,'/');while(t.length%4)t+='=';var s=atob(t),a=new Uint8Array(s.length),i;for(i=0;i<s.length;i++)a[i]=s.charCodeAt(i);return a.buffer;}
+function note(t,b){if(window.alertBox)window.alertBox(t,b,false);else alert(t+'. '+b);}
 function rnd(n){var a=new Uint8Array(n);crypto.getRandomValues(a);return a;}
 function authenticate(){
   var id;try{id=localStorage.getItem(KEY);}catch(e){}
@@ -1252,7 +1378,7 @@ row.onclick=function(e){
   e.preventDefault();if(busy)return;
   if(enabled()){
     busy=true;
-    authenticate().then(function(){try{localStorage.removeItem(KEY);}catch(x){}refresh();}).catch(function(){alert('App lock stays on until you verify it is you.');}).then(function(){busy=false;});
+    authenticate().then(function(){try{localStorage.removeItem(KEY);}catch(x){}refresh();}).catch(function(){note('App lock stays on','Verify with Face ID or your passcode to turn it off.');}).then(function(){busy=false;});
     return;
   }
   busy=true;
@@ -1266,7 +1392,7 @@ row.onclick=function(e){
   }}).then(function(c){
     try{localStorage.setItem(KEY,b64(c.rawId));sessionStorage.setItem(OK,'1');}catch(x){}
     refresh();
-  }).catch(function(){alert('Could not turn on app lock. Check that Face ID or a passcode is set up on this device.');}).then(function(){busy=false;});
+  }).catch(function(){note('Could not turn on app lock','Check that Face ID or a passcode is set up on this device.');}).then(function(){busy=false;});
 };
 
 /* lock on cold start and after being away for a while */

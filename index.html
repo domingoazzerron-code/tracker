@@ -572,8 +572,9 @@ button,.bar a,.drawer a,.flm{-webkit-user-select:none;user-select:none;-webkit-t
   <div class="dg" style="--i:7">Preferences</div>
   <div class="pref" id="prefs" style="--i:8"><span class="pl">Appearance</span><div class="seg" id="theme" role="group" aria-label="Appearance"><button data-t="auto">Auto</button><button data-t="light">Light</button><button data-t="dark">Dark</button></div><span class="pl">Motion and haptics</span><div class="seg" id="fxs" role="group" aria-label="Motion and haptics"><button data-m="1">Full</button><button data-m="2">Calm</button><button data-m="3">Off</button></div><div class="k" id="fxn"></div></div>
   <div class="dsep" style="--i:9"></div>
-  <a href="#" id="dout" style="--i:10" hidden>Sign out<small id="dem"></small></a>
+  <a href="#" id="dout" style="--i:10" hidden>Sign out<small id="dem"></small><small id="dsy"></small></a>
   <a href="#" id="ddel" style="--i:10" hidden>Delete account<small>Removes your login and cloud data</small></a>
+  <a href="#" id="dlock" style="--i:10" hidden>App lock<small id="dlocks">Off</small></a>
   <a href="#setup" data-v="setup" style="--i:10">Settings<small>Limits, pack price, triggers, data</small></a>
 </aside>
 
@@ -610,14 +611,25 @@ var user=null,mode='up',timer=null,busy=false;
 /* remember when local data last changed, and push to the cloud shortly after each save */
 var _set=Storage.prototype.setItem;
 Storage.prototype.setItem=function(k,v){_set.call(this,k,v);if(this===window.localStorage&&k===K){try{_set.call(this,MOD,String(Date.now()));}catch(e){}schedule();}};
-function schedule(){if(!user)return;clearTimeout(timer);timer=setTimeout(push,1500);}
+var dirty=false;
+function status(t){var e=$('dsy');if(e)e.textContent=t||'';}
+function hm(){var d=new Date(),h=d.getHours(),m=d.getMinutes();return (h%12||12)+':'+(m<10?'0':'')+m+(h<12?' AM':' PM');}
+function schedule(){if(!user)return;dirty=true;if(navigator.onLine===false)status('Offline, will sync when back online');clearTimeout(timer);timer=setTimeout(push,1500);}
 function push(){
   if(!user)return Promise.resolve();
   var raw=null;try{raw=localStorage.getItem(K);}catch(e){}
   if(!raw)return Promise.resolve();
   var data;try{data=JSON.parse(raw);}catch(e){return Promise.resolve();}
-  return sb.from('user_data').upsert({user_id:user.id,data:data,updated_at:new Date().toISOString()}).then(function(r){if(r.error)console.warn('sync',r.error.message);});
+  timer=null;
+  if(navigator.onLine===false){dirty=true;status('Offline, will sync when back online');return Promise.resolve();}
+  status('Syncing…');
+  return sb.from('user_data').upsert({user_id:user.id,data:data,updated_at:new Date().toISOString()}).then(function(r){
+    if(r.error){dirty=true;console.warn('sync',r.error.message);status('Sync failed, will retry');}
+    else{dirty=false;status('Synced at '+hm());}
+  }).catch(function(){dirty=true;status('Offline, will sync when back online');});
 }
+window.addEventListener('online',function(){if(user&&dirty)push();});
+window.addEventListener('offline',function(){if(user)status('Offline');});
 window.addEventListener('pagehide',function(){if(user&&timer){clearTimeout(timer);push();}});
 document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden'&&user&&timer){clearTimeout(timer);push();}});
 
@@ -656,7 +668,7 @@ function setMode(m){
 function showForm(){$('aform').hidden=false;gate.hidden=false;setMode('up');}
 function enter(u){
   user=u;$('dout').hidden=false;$('ddel').hidden=false;$('dem').textContent=u.email||'';
-  return reconcile().then(function(x){if(x!=='reload')hide();});
+  return reconcile().then(function(x){if(x!=='reload'){var e=$('dsy');if(e&&!e.textContent)status(navigator.onLine===false?'Offline':'Synced');hide();}});
 }
 $('tup').onclick=function(){setMode('up');};
 $('tin').onclick=function(){setMode('in');};
@@ -685,7 +697,7 @@ $('ddel').onclick=function(e){
   sb.rpc('delete_my_account').then(function(r){
     if(r.error){alert('Could not delete account: '+r.error.message);return;}
     return sb.auth.signOut().catch(function(){}).then(function(){
-      try{localStorage.removeItem(K);localStorage.removeItem(MOD);sessionStorage.removeItem(PULL);}catch(x){}
+      try{localStorage.removeItem(K);localStorage.removeItem(MOD);localStorage.removeItem('cigtracker.lock');sessionStorage.removeItem(PULL);}catch(x){}
       location.reload();
     });
   });
@@ -693,7 +705,7 @@ $('ddel').onclick=function(e){
 $('dout').onclick=function(e){
   e.preventDefault();
   (user?push():Promise.resolve()).then(function(){return sb.auth.signOut();}).then(function(){
-    try{localStorage.removeItem(K);localStorage.removeItem(MOD);sessionStorage.removeItem(PULL);}catch(x){}
+    try{localStorage.removeItem(K);localStorage.removeItem(MOD);localStorage.removeItem('cigtracker.lock');sessionStorage.removeItem(PULL);}catch(x){}
     location.reload();
   });
 };
@@ -735,7 +747,7 @@ function money(n){return S.cur+n.toFixed(2);}
 function countSince(days){var now=new Date(),start=new Date(now.getFullYear(),now.getMonth(),now.getDate()-(days-1)).getTime();return srt().length-lb(start);}
 function monthCount(){var n=new Date(),s=new Date(n.getFullYear(),n.getMonth(),1).getTime();return srt().length-lb(s);}
 function ovReset(){cfCb=null;cxCb=null;$('cx').textContent='Cancel';$('cx').hidden=true;$('ok').textContent='OK';$('ok').className='btn pri blk';}
-function alertBox(title,text,warn){ovReset();var sc=$('slipc');if(sc)sc.hidden=true;$('ot').textContent=title;$('op').textContent=text;$('box').className='box'+(warn?' w':'');showOv();try{if(navigator.vibrate)navigator.vibrate([200,100,200]);}catch(e){}}
+function alertBox(title,text,warn){ovReset();var sc=$('slipc');if(sc)sc.hidden=true;$('ot').textContent=title;$('op').textContent=text;$('box').className='box'+(warn?' w':'');showOv();try{if(typeof buzz==='function')buzz('strong');else if(navigator.vibrate)navigator.vibrate([200,100,200]);}catch(e){}}
 var VIEWS=['today','history','setup','plan','insights','summary','tips'];
 var TTL={today:'',history:'History',setup:'Settings',plan:'Plan',insights:'Insights',summary:'Quit summary',tips:'Craving tips'};
 var dotReady=false;
@@ -1179,6 +1191,91 @@ document.addEventListener('keydown',function(e){if(e.key==='Tab'&&!$('su').hidde
 route();render();
 if(!S.setup)openSetup();else setTimeout(qhShow,800);
 $('masc').classList.add('first');setTimeout(function(){$('masc').classList.remove('first');},1400);
+})();
+</script>
+
+<style>
+#lock{position:fixed;inset:0;z-index:300;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:calc(24px + env(safe-area-inset-top,0px)) 20px calc(24px + env(safe-area-inset-bottom,0px))}
+#lock[hidden]{display:none}
+#lock .lc{width:100%;max-width:340px;text-align:center}
+#lock .lg{width:64px;height:64px;margin:0 auto 16px;display:block;border-radius:16px}
+#lock h1{margin:0 0 6px;font-size:22px;letter-spacing:-.02em}
+#lock p{margin:0 0 20px;color:var(--mute);font-size:14px}
+#lock .lm{min-height:20px;margin:12px 0 0;font-size:13px;color:var(--bad)}
+</style>
+<div id="lock" role="dialog" aria-modal="true" aria-label="Locked" hidden>
+  <div class="lc">
+    <img class="lg" src="/icon-192.png" alt="">
+    <h1>Wisp Tracker is locked</h1>
+    <p>Unlock to continue.</p>
+    <button type="button" class="btn pri blk" id="lkgo">Unlock</button>
+    <div class="lm" id="lkm" role="status"></div>
+    <button type="button" class="btn txt blk" id="lkso" style="margin-top:4px">Can’t unlock? Sign out</button>
+  </div>
+</div>
+<script>
+/* ===== App lock: Face ID / Touch ID / device passcode via a device passkey. Stays on this device only. ===== */
+(function(){
+var KEY='cigtracker.lock',OK='cigtracker.unlocked',AWAY=30000;
+function $(i){return document.getElementById(i);}
+var row=$('dlock'),sub=$('dlocks'),ov=$('lock'),msgEl=$('lkm'),hiddenAt=0,busy=false;
+function enabled(){try{return !!localStorage.getItem(KEY);}catch(e){return false;}}
+function b64(buf){var a=new Uint8Array(buf),s='',i;for(i=0;i<a.length;i++)s+=String.fromCharCode(a[i]);return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');}
+function unb64(t){t=t.replace(/-/g,'+').replace(/_/g,'/');while(t.length%4)t+='=';var s=atob(t),a=new Uint8Array(s.length),i;for(i=0;i<s.length;i++)a[i]=s.charCodeAt(i);return a.buffer;}
+function rnd(n){var a=new Uint8Array(n);crypto.getRandomValues(a);return a;}
+function authenticate(){
+  var id;try{id=localStorage.getItem(KEY);}catch(e){}
+  if(!id)return Promise.reject(new Error('no credential'));
+  return navigator.credentials.get({publicKey:{challenge:rnd(32),allowCredentials:[{type:'public-key',id:unb64(id)}],userVerification:'required',timeout:60000}});
+}
+function showLock(auto){
+  if(!enabled())return;
+  try{sessionStorage.removeItem(OK);}catch(e){}
+  ov.hidden=false;msgEl.textContent='';
+  if(auto)tryUnlock(true);
+}
+function unlocked(){try{sessionStorage.setItem(OK,'1');}catch(e){}ov.hidden=true;msgEl.textContent='';}
+function tryUnlock(quiet){
+  if(busy)return;busy=true;
+  authenticate().then(unlocked).catch(function(){if(!quiet)msgEl.textContent='Could not unlock. Try again.';}).then(function(){busy=false;});
+}
+$('lkgo').onclick=function(){tryUnlock(false);};
+$('lkso').onclick=function(){$('dout').click();};
+
+function refresh(){sub.textContent=enabled()?'On, locks when you leave the app':'Off';}
+if(window.PublicKeyCredential&&navigator.credentials&&PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable){
+  PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().then(function(ok){
+    if(ok||enabled()){row.hidden=false;refresh();}
+  }).catch(function(){});
+}
+row.onclick=function(e){
+  e.preventDefault();if(busy)return;
+  if(enabled()){
+    busy=true;
+    authenticate().then(function(){try{localStorage.removeItem(KEY);}catch(x){}refresh();}).catch(function(){alert('App lock stays on until you verify it is you.');}).then(function(){busy=false;});
+    return;
+  }
+  busy=true;
+  navigator.credentials.create({publicKey:{
+    challenge:rnd(32),
+    rp:{name:'Wisp Tracker'},
+    user:{id:rnd(16),name:'wisp-tracker',displayName:'Wisp Tracker'},
+    pubKeyCredParams:[{type:'public-key',alg:-7},{type:'public-key',alg:-257}],
+    authenticatorSelection:{authenticatorAttachment:'platform',userVerification:'required',residentKey:'discouraged'},
+    timeout:60000
+  }}).then(function(c){
+    try{localStorage.setItem(KEY,b64(c.rawId));sessionStorage.setItem(OK,'1');}catch(x){}
+    refresh();
+  }).catch(function(){alert('Could not turn on app lock. Check that Face ID or a passcode is set up on this device.');}).then(function(){busy=false;});
+};
+
+/* lock on cold start and after being away for a while */
+var fresh=true;try{fresh=sessionStorage.getItem(OK)!=='1';}catch(e){}
+if(enabled()&&fresh)showLock(true);
+document.addEventListener('visibilitychange',function(){
+  if(document.visibilityState==='hidden'){hiddenAt=Date.now();}
+  else if(enabled()&&hiddenAt&&Date.now()-hiddenAt>AWAY){hiddenAt=0;showLock(true);}
+});
 })();
 </script>
 </body>
